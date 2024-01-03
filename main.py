@@ -13,7 +13,7 @@ import uuid
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import subprocess
-
+import configparser
 
 
 def send_email_with_attachment(name,sender_email, sender_password, receiver_email, subject, body, file_path):
@@ -41,62 +41,39 @@ app = Flask(__name__)
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
-    # Handle the incoming GET request data
+    config = configparser.ConfigParser()
+    config.read('setting.ini')
     data = request.json 
-    
-    # Process the received data (you can perform actions based on this data)
-    # For now, just print the received data
     print("Received form data:", data)
     form_data = data['data']
-    # Add your handling logic here
     doc = Document('template.docx')
-    # styled_font = {
-    # 'bold': False,
-    # 'italic': False,
-    # 'underline': False,
-    # 'color': '000000',  # Red color (format: 'AARRGGBB')
-    # 'name': 'Arial',
-    # 'size': 12
-    # }
-    find_replace_word(doc, '$NAME$', form_data['姓名'])
-    find_replace_word(doc, '$GENDER$', form_data['性別'])
-    find_replace_word(doc, '$Y$', form_data['出生年月日'][0:4])
-    find_replace_word(doc, '$M$', form_data['出生年月日'][5:7])
-    find_replace_word(doc, '$D$', form_data['出生年月日'][8:10])
-    find_replace_word(doc, '$ID$', form_data['身分證字號'])
-    find_replace_word(doc, '$PHONE$', form_data['聯絡電話'])
-    find_replace_word(doc, '$CONTACTADDRESS$', form_data['通訊地址'])
-    find_replace_word(doc, '$HOMEADDRESS$', form_data['戶籍地址'])
-    find_replace_word(doc, '$EMAIL$', data['email'])
-    find_replace_word(doc, '$SCHOOL$', form_data['畢業學校'])
-    find_replace_word(doc, '$SUBJECT$', form_data['畢業系所'])
-    find_replace_word(doc, '$CAREER$', form_data['現職'])
-    find_replace_word(doc, '$GY$', form_data['畢業年份'])
-    find_replace_word(doc, '$LINE$', form_data['Line ID'])
-    find_replace_word(doc, '$SID$', form_data['在學期間的學號'])
-    name= form_data['姓名']
+    for problem in config['PROBLEMS']:
+        if problem in form_data:
+            find_replace_word(doc, config['PROBLEMS'][problem], form_data[problem])
+            break
+
     receiver_email= data['email']
-    email_subject = '【陽明交通大學校友會】校友資料確認信'
-    email_body='敬愛的' + name + '校友夥伴您好：\n\n我們已收到您送出的會員入會表單，感謝您對陽明交大校友總會的鼎力支持。\n\n附件為包含您個人資料的申請表檔案，請您下載並列印該份檔案、確認資料無誤（或以紅筆修改有誤的資料）並簽章後，連同申請表上所列的附件，於113年1月31日前以掛號寄回本會（郵寄資料載於申請表第二頁）。我們會在收到書面申請表後再次以電子郵件通知您。\n\n如您遇到任何問題，歡迎隨時與我們聯繫：\n校友總會籌備會電子信箱｜nycualumni@gmail.com\n校友總會籌備會粉絲專頁｜https://www.facebook.com/nycualumni\n\n您的加入與支持，將成為校友總會最堅實的後盾。我們因為對母校的情感而齊聚、為了回饋母校而共同努力，相信我們今日的連結，都將成為同行於社會上的力量。\n\n國立陽明交通大學校友總會籌備會\n主任委員　梁家語' 
+    email_subject = config['EMAIL']['subject']
+    email_body= config['EMAIL']['body']
     uuid4 = str(uuid.uuid4())
-    doc.save(uuid4+name + '.docx')
-    fiiename= uuid4+name + '.docx'
-    file_path = './nycuaa/auto_mail/'+name + '.docx'
-    task_thread = threading.Thread(target=send_request_and_process, args=(name, receiver_email, email_subject, email_body, fiiename))
+    doc.save(uuid4 + '.docx')
+    fiiename= uuid4 + '.docx'
+    pdfname = "Type your pdf name here"
+    task_thread = threading.Thread(target=send_request_and_process, args=(pdfname, receiver_email, email_subject, email_body, fiiename))
     task_thread.start()
     return "Received the data successfully!"
 
 def send_request_and_process(name, receiver_email, email_subject, email_body, fiiename):
+    config = configparser.ConfigParser()
+    config.read('setting.ini')
     while not os.path.exists(fiiename):
         print('wait for ' + fiiename + '...')
         time.sleep(1)
     time.sleep(1)
     pdfname= fiiename[:-4] + 'pdf'
     subprocess.run(['doc2pdf', fiiename])
-    # convert_docx_to_pdf(fiiename, pdfname)
-    # time.sleep(5)
     print('send email to ' + receiver_email + '...')
-    send_email_with_attachment(name,'nycualumni@gmail.com', 'vffgwnqaldkjaebv', receiver_email, email_subject, email_body, pdfname) 
+    send_email_with_attachment(name, config["EMAIL_SETTING"]["email_address"], config['EMAIL_SETTING']["password"] , receiver_email, email_subject, email_body, pdfname) 
     print('send email to ' + receiver_email + ' successfully!')
 
 def find_replace_word(doc, old_word, new_word):
